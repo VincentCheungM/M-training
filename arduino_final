@@ -2,9 +2,9 @@
 
 #define lefta 5
 #define leftb 6
-#define righta 10
+#define righta 4
 #define rightb 11
-#define ser1 9 
+#define ser1 9
 
 #define R 3.2
 #define L 14
@@ -79,10 +79,8 @@ void setup() {
   pinMode(rightb,OUTPUT);
   pinMode(encoderPinA, INPUT); 
   pinMode(encoderPinB, INPUT); 
-  pinMode(clearButton, INPUT);
   digitalWrite(encoderPinA, HIGH);  // turn on pullup resistor
   digitalWrite(encoderPinB, HIGH);  // turn on pullup resistor
-  digitalWrite(clearButton, HIGH);
 
 // encoder pin on interrupt 0 (pin 2)
   attachInterrupt(0, doEncoderA, CHANGE);
@@ -96,10 +94,10 @@ void setup() {
 
 void ahead(int time){
   //digitalWrite(lefta,HIGH);
-  analogWrite(lefta,90);
+  analogWrite(lefta,130);
   digitalWrite(leftb,LOW);
   //digitalWrite(righta,HIGH);
-  analogWrite(righta,90);
+  analogWrite(righta,130);
   digitalWrite(rightb,LOW);
   le=1;
   ri=1;  
@@ -117,6 +115,17 @@ void left(int time){
   delay(time*1000);
 }
 
+void back(int time){
+ //digitalWrite(lefta,HIGH);
+  analogWrite(leftb,100);
+  digitalWrite(lefta,LOW);
+  //digitalWrite(righta,HIGH);
+  analogWrite(rightb,100);
+  digitalWrite(righta,LOW);
+  le=-1;
+  ri=-1;  
+  delay(time*1000);
+}
 void right(int time){
   //digitalWrite(lefta,HIGH);
   digitalWrite(righta,LOW);
@@ -149,6 +158,7 @@ void catchs(int i){
 
 void loop(){ 
 	//force read
+  //back(1000);
   if(Serial.available()){
 	stops(0);// not known how long
 	//clear data? reset to original states
@@ -161,10 +171,12 @@ void loop(){
 	theta_t=0;
 	A_set=0;
 	B_set=0;
+        Serial.println("into");
 	//clear data?
 	cmd = (char)Serial.read();
 	// serial is ready and read a byte, for degrees / 10
 	switch(cmd){
+                case 'y': de = 2; break;
 		case '0': de = 5; break;
 		case '1': de = 10; break;
 		case '2': de = 20; break;
@@ -175,7 +187,9 @@ void loop(){
 		case '7': de = 70; break;
 		case '8': de = 80; break;
 		case '9': de = 90; break;
+                case 'e': de = 140;break;
 		case 't': de = 180; break;
+                case 'q': de = 360; break;
 		default : de = 0; break;
 	}
 	cmd = (char)Serial.read();
@@ -186,7 +200,7 @@ void loop(){
 		case 'a': movement = left_; left(0);break;
 		case 'd': movement = right_; right(0);break;
 		case 'c': movement = stops_;stops(0);catchs(1);break;
-		case 'o': movement = stops_;stops(0);catchs(0);break;
+		case 'o': movement = stops_;stops(0);catchs(0);Serial.println("open");break;
 		default : movement = stops_;stops(0);catchs(0);break;
 	}
   } else {
@@ -202,7 +216,7 @@ void loop(){
 	  psudo code*/
 	  
 	  //rc is error torlerence value
-	  if(movement==ahead_&&x+rc>=de){
+	  if(movement==ahead_&&x>=de){
 		stops(0);
 	  } else if(movement==left_&&w+rcr>=de){
 		stops(0);
