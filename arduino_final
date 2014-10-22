@@ -1,0 +1,269 @@
+#include "Servo.h"
+
+#define lefta 5
+#define leftb 6
+#define righta 10
+#define rightb 11
+#define ser1 9 
+
+#define R 3.2
+#define L 14
+//L should be 9? original 14
+//mpr=2*pi*R/20
+//actual(16)1.26 tick might be 20 so, use 20
+#define mpr 1.117
+//1.01 ver1 1.25 ver2
+#define V 0.1
+#define dt 0.250
+
+#define rc 5
+// tolerance distance for x is 5
+#define rcr 10
+// tolerance degrees for w is 10
+
+enum PinAssignments {
+  encoderPinA = 2,
+  encoderPinB = 3,
+  clearButton = 8
+};
+
+enum Movement{
+	ahead_ = 1,
+	left_ = 2,
+	right_ = 3,
+	stops_ = 4
+};
+
+volatile long encoderPos = 0;
+long lastReportedPos = 1;
+
+volatile unsigned int A_set = 0;
+unsigned int A_old = 0;
+volatile unsigned int B_set = 0;
+unsigned int B_old = 0;
+
+/********************************////
+double x=0;
+double x_t=0;
+double l=0;
+double r=0;
+double y=0;
+double y_t=0;
+double theta = 0;
+double theta_t=0;
+double x_g=0;
+double y_g=0;
+double e_k = 0;
+double e_k_1 = 0;
+double u_x=0;
+double u_y=0;
+double theta_g=0;
+double e_P=0;
+double E_k=0;
+double e_I=0;
+double e_D=0;
+double w=0;
+int le=1;
+int ri=1;
+/**********************************/
+
+char cmd;
+double de=0;
+Servo mys1;
+int movement=stops_;
+/**********************************/
+void setup() {
+  pinMode(lefta,OUTPUT);
+  pinMode(leftb,OUTPUT);
+  pinMode(righta,OUTPUT);
+  pinMode(rightb,OUTPUT);
+  pinMode(encoderPinA, INPUT); 
+  pinMode(encoderPinB, INPUT); 
+  pinMode(clearButton, INPUT);
+  digitalWrite(encoderPinA, HIGH);  // turn on pullup resistor
+  digitalWrite(encoderPinB, HIGH);  // turn on pullup resistor
+  digitalWrite(clearButton, HIGH);
+
+// encoder pin on interrupt 0 (pin 2)
+  attachInterrupt(0, doEncoderA, CHANGE);
+// encoder pin on interrupt 1 (pin 3)
+  attachInterrupt(1, doEncoderB, CHANGE);
+  
+  Serial.begin(57600);
+  mys1.attach(ser1);
+  mys1.write(0);
+}
+
+void ahead(int time){
+  //digitalWrite(lefta,HIGH);
+  analogWrite(lefta,90);
+  digitalWrite(leftb,LOW);
+  //digitalWrite(righta,HIGH);
+  analogWrite(righta,90);
+  digitalWrite(rightb,LOW);
+  le=1;
+  ri=1;  
+  delay(time*1000);
+}
+
+void left(int time){
+  //digitalWrite(lefta,HIGH);
+  digitalWrite(lefta,LOW);
+  analogWrite(leftb,130);
+  //digitalWrite(righta,HIGH);
+  analogWrite(righta,130);
+  digitalWrite(rightb,LOW);
+  le=-1;  
+  delay(time*1000);
+}
+
+void right(int time){
+  //digitalWrite(lefta,HIGH);
+  digitalWrite(righta,LOW);
+  analogWrite(rightb,130);
+  //digitalWrite(righta,HIGH);
+  analogWrite(lefta,130);
+  digitalWrite(leftb,LOW);
+  ri=-1;  
+  delay(time*1000);
+}
+
+void stops(int time){
+  //digitalWrite(lefta,HIGH);
+  digitalWrite(righta,LOW);
+  digitalWrite(rightb,LOW);
+  //digitalWrite(righta,HIGH);
+  digitalWrite(lefta,LOW);
+  digitalWrite(leftb,LOW);
+  ri=0;
+  le=0;  
+  delay(time*1000);
+}
+void catchs(int i){
+	if(i)
+		mys1.write(60);
+	else
+		mys1.write(0);
+}
+
+
+void loop(){ 
+	//force read
+  if(Serial.available()){
+	stops(0);// not known how long
+	//clear data? reset to original states
+	w =0;
+	x =0;
+	y =0;
+	x_t=0;
+	y_t=0;
+	theta=0;
+	theta_t=0;
+	A_set=0;
+	B_set=0;
+	//clear data?
+	cmd = (char)Serial.read();
+	// serial is ready and read a byte, for degrees / 10
+	switch(cmd){
+		case '0': de = 5; break;
+		case '1': de = 10; break;
+		case '2': de = 20; break;
+		case '3': de = 30; break;
+		case '4': de = 40; break;
+		case '5': de = 50; break;
+		case '6': de = 67; break;
+		case '7': de = 70; break;
+		case '8': de = 80; break;
+		case '9': de = 90; break;
+		case 't': de = 180; break;
+		default : de = 0; break;
+	}
+	cmd = (char)Serial.read();
+	//read movement
+	switch(cmd){
+		case 'w': movement = ahead_; ahead(0);break;
+		case 's': movement = stops_; stops(0);break;
+		case 'a': movement = left_; left(0);break;
+		case 'd': movement = right_; right(0);break;
+		case 'c': movement = stops_;stops(0);catchs(1);break;
+		case 'o': movement = stops_;stops(0);catchs(0);break;
+		default : movement = stops_;stops(0);catchs(0);break;
+	}
+  } else {
+	odmetry();//update 
+	A_old += A_set;
+	A_set = 0;
+	B_old += B_set;
+	B_set = 0;
+	// update 
+	/*psudo code
+	if(finish)
+		stops();
+	  psudo code*/
+	  
+	  //rc is error torlerence value
+	  if(movement==ahead_&&x+rc>=de){
+		stops(0);
+	  } else if(movement==left_&&w+rcr>=de){
+		stops(0);
+	  } else if(movement==right_&&-w+rcr>=de){
+		stops(0);	//c'z while turn right, w will be negative, thus we minus w
+	  }
+   }
+  delay(50);
+}
+
+// Interrupt on A changing state
+void doEncoderA(){
+  // Test transition
+  if(digitalRead(encoderPinA)==HIGH){ //debouncing
+    delay(3);
+    A_set += digitalRead(encoderPinA) == HIGH?1:0;
+  }
+}
+
+// Interrupt on B changing state
+void doEncoderB(){
+  if(digitalRead(encoderPinB)==HIGH){ //debouncing
+    delay(3);
+    B_set += digitalRead(encoderPinB) == HIGH?1:0;
+  }
+}
+
+void odmetry(){
+ 
+  l=A_set*mpr*le;
+  r=B_set*mpr*ri;
+  x_t=(l+r)/2*cos(theta);
+  y_t=(l+r)/2*sin(theta);
+  theta_t=(r-l)/L;
+  w+=theta_t/0.0348;//0.0348
+  x+=x_t;
+  y+=y_t;
+  theta+=theta_t*0.0174;//to radian
+
+}
+
+void pid(){
+  double kp = 4;
+  double ki = 0.01;
+  double kd = 0.01;
+ 
+ u_x=x_g-x;
+ u_y=y_g-y;
+ theta_g=atan2(u_y,u_x);
+ 
+ e_k = theta_g-theta;
+ e_k=atan2(sin(e_k),cos(e_k));
+ 
+ e_P = e_k;
+ 
+ e_I = E_k + e_k*dt;
+ e_D = (e_k - e_k_1)/dt;
+ 
+ //w=kp*e_p + ki*e_I + kd*e_D;
+ E_k = e_I;
+ e_k_1 = e_k;
+ 
+  
+}
