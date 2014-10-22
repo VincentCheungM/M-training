@@ -6,11 +6,15 @@
 
 #define R 3.2
 #define L 14
+//L should be 9? original 14
 //mpr=2*pi*R/20
 //actual(16)1.26 tick might be 20 so, use 20
-#define mpr 1.01
+#define mpr 1.117
+//1.01 ver1 1.25 ver2
 #define V 0.1
 #define dt 0.250
+
+#define rc 30
 
 enum PinAssignments {
   encoderPinA = 2,
@@ -46,6 +50,7 @@ double e_P=0;
 double E_k=0;
 double e_I=0;
 double e_D=0;
+double w=0;
 int le=1;
 int ri=1;
 /**********************************/
@@ -73,10 +78,10 @@ void setup() {
 
 void ahead(int time){
   //digitalWrite(lefta,HIGH);
-  analogWrite(lefta,110);
+  analogWrite(lefta,90);
   digitalWrite(leftb,LOW);
   //digitalWrite(righta,HIGH);
-  analogWrite(righta,110);
+  analogWrite(righta,90);
   digitalWrite(rightb,LOW);
   le=1;  
   delay(time*1000);
@@ -85,9 +90,9 @@ void ahead(int time){
 void left(int time){
   //digitalWrite(lefta,HIGH);
   digitalWrite(lefta,LOW);
-  analogWrite(leftb,200);
+  analogWrite(leftb,130);
   //digitalWrite(righta,HIGH);
-  analogWrite(righta,200);
+  analogWrite(righta,130);
   digitalWrite(rightb,LOW);
   le=-1;  
   delay(time*1000);
@@ -96,19 +101,7 @@ void left(int time){
 void loop(){ 
   left(0);
   if (A_set != 0) {
-    Serial.print("r :");
-    Serial.println(r);
-    Serial.print("l :");
-    Serial.println(l);
-    Serial.print("x_t:");
-    Serial.print(x_t, DEC);
-    Serial.println() ;
-    Serial.print("y_t:");
-    Serial.println(y_t);
-    Serial.print("x:");
-    Serial.println(x);
-    Serial.print("y:");
-    Serial.println(y);
+    Serial.println(w);
     Serial.print("theta_t :");
     Serial.println(theta_t);
     Serial.println(theta);
@@ -119,14 +112,15 @@ void loop(){
    B_old += B_set;
    B_set = 0;
    
-   if(theta>=3){
+   if(w+15>=90){
        Serial.println(x);
        Serial.println(y);
        analogWrite(leftb,0);
        analogWrite(righta,0);
-       delay(100000);
+       delay(2000);
+       w=0;
    }
-  delay(50);
+  delay(150);
 }
 
 // Interrupt on A changing state
@@ -153,7 +147,7 @@ void odmetry(){
   x_t=(l+r)/2*cos(theta);
   y_t=(l+r)/2*sin(theta);
   theta_t=(r-l)/L;
-  
+  w+=theta_t/0.0348;
   x+=x_t;
   y+=y_t;
   theta+=theta_t*0.0174;//to radian
