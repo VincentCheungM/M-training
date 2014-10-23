@@ -1,0 +1,119 @@
+#
+#   Connects SUB socket to tcp://localhost:5556
+#
+
+import sys
+import zmq
+import struct
+import thread 
+import time
+import serial
+
+x = 0
+y = 1
+r = 0
+lock = thread.allocate_lock()
+xleftbound = 0
+xrightbound = 180
+approachbound = 30
+catchbound = 70
+
+arduino = serial.Serial('/dev/ttyACM0',57600,timeout=1)
+arduino.open()
+
+def receiveData():
+	global x,y,r,lock
+	#  Socket to talk to server
+	context = zmq.Context()
+	socket = context.socket(zmq.SUB)
+	print("Collecting updates from server...")
+	socket.connect("tcp://localhost:5556")
+	zip_filter = ""
+	# Python 2 - ascii bytes to unicode str
+	if isinstance(zip_filter, bytes):
+		zip_filter = zip_filter.decode('ascii')
+	socket.setsockopt_string(zmq.SUBSCRIBE, zip_filter)
+	while True:
+    		data = socket.recv()
+		content = struct.unpack('iii', data[0:12]) 
+		lock.acquire()
+		x = content[0]
+		y = content[1]
+		r = content[2]
+		lock.release()
+    		#print(content)
+
+thread.start_new_thread(receiveData, ())
+
+def catch():
+	global x, y, r, arduino, xleftbound, xrightbound, catchbound, approachbound
+        print('do catching')
+	while x>0 and y>1 and r>0:
+		while x<xleftbound:
+                        print('x < leftbound '+x+'<')
+			arduino.write("0s")
+		while x>xrightbound:
+                        print('x > rightbound '+x+'<')
+			arduino.write("0d")
+		if y>approachbound:
+                        print('y > appbound '+y+'<')
+			arduino.write("oo")
+			while y<catchbound:
+                                print('t < catchbound '+y+'<')
+				arduino.write("yw")
+		if y>=catchbound and xleftbound<x and x>xrightbound:
+                        print('catching')
+			arduino.write('0c')
+			sys.exit()
+		arduino.write('0w')
+		
+
+def around():
+	global x, y, r, arduino, xleftbound, xrightbound, catchbound, approachbound
+	t=arduino.readline()
+	time.sleep(0.8)
+	arduino.write("qa")
+	time.sleep(0.1)
+	print('send qa')		
+	while arduino.readline()!= '1':
+        	#print('not request')
+		print(arduino.readline())
+		if x>0 and y>1 and r>0:
+			arduino.write("ss")
+			catch()
+		time.sleep(0.8)
+	print('done around')
+			
+def straight(distance):
+	global x, y, r, arduino, xleftbound, xrightbound, catchbound, approachbound
+	arduino.write(distance)
+	arduino.wirte('w')
+	print('go straight')
+	while arduino.read()!= 1:
+                print('not request')
+		if x>0 and y>1 and r>0:
+			arduino.write('ss')
+			catch()
+			
+def turn(angle):
+	global x, y, r, arduino, xleftbound, xrightbound, catchbound, approachbound
+	arduino.write(angle)
+        arduino.write('a')
+        print('send turn')
+	while arduino.read()!= 1:
+                print('not request')
+		if x>0 and y>1 and r>0:
+			arduino.write('ss')
+			catch()
+while True:
+	
+        for i in range(6):
+                if i==0:
+                        around()
+                        straight('e')
+                        around()
+                        turn(6)
+                else:
+                        turn(6)
+                        straight('e')
+                        around()
